@@ -4,53 +4,148 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Member Photo Upload</title>
-  <script src="https://upload-widget.cloudinary.com/global/all.js" type="text/javascript"></script>
+
+  <!-- Uploadcare Web Component styles -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.css"
+  >
+
+  <!-- Uploadcare Web Components -->
+  <script type="module">
+    import * as UC from 'https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.js';
+    UC.defineComponents(UC);
+  </script>
+
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; padding: 24px; background:#5c6b7a; color:#fff; }
-    .wrap { max-width: 520px; margin: 0 auto; text-align: center; }
-    button { padding: 12px 18px; font-size: 16px; cursor: pointer; }
-    #status { margin-top: 16px; font-size: 14px; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 24px; background:#f6f7fb; color:#111; }
+    .wrap { max-width: 640px; margin: 0 auto; }
+    h1 { margin-bottom: 8px; }
+    p  { margin-top: 0; color:#444; }
+    .status { margin-top: 16px; font-size: 14px; }
+    .done { color: #0a7a2f; }
+    .error { color: #b00020; white-space: pre-wrap; }
+    uc-file-uploader-regular { display:block; margin-top:16px; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Upload your profile photo</h1>
-    <p>Please, rename your file with your full name.</p>
     <p>Accepted formats: JPG, JPEG, PNG, HEIC</p>
-    <button id="upload_widget">Upload Photo</button>
-    <div id="status" role="status" aria-live="polite"></div>
+
+    <!-- Uploadcare global config for this page -->
+    <uc-config
+      ctx-name="my-uploader"
+      pubkey="0db3ca4d026eff0750b7"
+      source-list="local, camera, facebook, gdrive"
+      multiple="false"
+      img-only="true"
+    ></uc-config>
+
+    <!-- The actual uploader UI -->
+    <uc-file-uploader-regular
+      ctx-name="my-uploader"
+      class="uc-light"
+    ></uc-file-uploader-regular>
+
+    <!-- Context provider (required by Uploadcare WC) -->
+    <uc-upload-ctx-provider ctx-name="my-uploader"></uc-upload-ctx-provider>
+
+    <div id="status" class="status" role="status" aria-live="polite"></div>
   </div>
 
   <script>
-    const widget = cloudinary.createUploadWidget(
-      {
-        cloudName: "chief-executives-organization", // your cloud name
-        uploadPreset: "Member_uploads",             // your unsigned preset
-        folder: "home/headshots/Member upload",     // optional, from preset
-        tags: ["member-upload"],
-        multiple: false,
-        clientAllowedFormats: ["jpg","jpeg","png","heic"],
-        sources: ["local","camera","url"],
-        showCompletedButton: true,
-        showUploadMoreButton: false
-      },
-      (error, result) => {
-        const status = document.getElementById("status");
-        if (error) {
-          console.error(error);
-          status.textContent = "Upload failed. Please try again.";
-          return;
-        }
-        if (result && result.event === "success") {
-          status.textContent = "Upload successful! You may close this window.";
-          setTimeout(() => { 
-            window.location.href = "https://www.ceo.org/successful-upload"; 
-          }, 1200);
-        }
-      }
-    );
+    // ---- Cloudinary settings for CEO ----
+    const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/chief-executives-organization/image/upload";
+    const CLOUDINARY_PRESET     = "Member_uploads";                    // unsigned preset
+    const CLOUDINARY_FOLDER     = "home/headshots/Member upload";      // optional (will also work from preset)
+    const CLOUDINARY_TAGS       = "member-upload";
+    const SUCCESS_REDIRECT      = "https://www.ceo.org/successful-upload";
 
-    document.getElementById("upload_widget").addEventListener("click", () => widget.open());
+    const $status = document.getElementById("status");
+
+    // Utility to push a remote file URL into Cloudinary (unsigned)
+    async function sendToCloudinary(remoteUrl, extraTags=[]) {
+      const form = new FormData();
+      form.append("file", remoteUrl);
+      form.append("upload_preset", CLOUDINARY_PRESET);
+      form.append("folder", CLOUDINARY_FOLDER);
+      form.append("tags", [CLOUDINARY_TAGS, ...extraTags].join(","));
+
+      const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: "POST", body: form });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Cloudinary upload failed");
+      }
+      return res.json();
+    }
+
+    // Try to extract a usable CDN URL from Uploadcare event payloads
+    function extractUploadcareUrl(detail) {
+      // Common possibilities across Uploadcare events
+      // Prefer a direct cdnUrl if present
+      if (detail?.cdnUrl) return detail.cdnUrl;
+      if (detail?.file?.cdnUrl) return detail.file.cdnUrl;
+
+      // If we only have a UUID, build the URL
+      const uuid = detail?.uuid || detail?.file?.uuid || detail?.data?.uuid;
+      if (uuid) return `https://ucarecdn.com/${uuid}/`;
+
+      return null;
+    }
+
+    // Listen for success events from the Uploadcare Web Component
+    // Different versions may emit slightly different event names; we subscribe to a few.
+    const ucEl = document.querySelector("uc-file-uploader-regular");
+    const possibleEvents = [
+      "file-upload-success",   // commonly emitted with { cdnUrl, uuid, ... }
+      "upload-success",
+      "file-ready",
+      "change"                 // fallback: inspect value for file data
+    ];
+
+    possibleEvents.forEach(evtName => {
+      ucEl.addEventListener(evtName, async (evt) => {
+        try {
+          // Ignore non-final states for 'change'
+          if (evtName === "change" && !evt?.detail) return;
+
+          const url = extractUploadcareUrl(evt.detail);
+          if (!url) {
+            // If 'change' provides a list, try to read first item
+            const maybeList = evt?.detail?.value || evt?.detail?.files;
+            const first = Array.isArray(maybeList) ? maybeList[0] : null;
+            const fallbackUrl = extractUploadcareUrl(first || {});
+            if (!fallbackUrl) return; // not ready yet
+            await handleForward(fallbackUrl);
+          } else {
+            await handleForward(url);
+          }
+        } catch (err) {
+          $status.className = "status error";
+          $status.textContent = "Upload error: " + (err?.message || err);
+          console.error(err);
+        }
+      });
+    });
+
+    async function handleForward(uploadcareCdnUrl) {
+      // Prevent double-submission if multiple events fire
+      if (ucEl.__forwarding) return;
+      ucEl.__forwarding = true;
+
+      $status.className = "status";
+      $status.textContent = "Uploading to Cloudinary…";
+
+      const result = await sendToCloudinary(uploadcareCdnUrl);
+      console.log("Cloudinary result:", result);
+
+      $status.className = "status done";
+      $status.textContent = "Upload successful! Redirecting…";
+
+      // Gentle redirect for a clean UX
+      setTimeout(() => { window.location.href = SUCCESS_REDIRECT; }, 900);
+    }
   </script>
 </body>
 </html>
