@@ -1,72 +1,55 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Member Photo Upload</title>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Member Photo Upload</title>
+  <script src="https://upload-widget.cloudinary.com/global/all.js" type="text/javascript"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; padding: 24px; background:#5c6b7a; color:#fff; }
+    .wrap { max-width: 520px; margin: 0 auto; text-align: center; }
+    button { padding: 12px 18px; font-size: 16px; cursor: pointer; }
+    #status { margin-top: 16px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Upload your profile photo</h1>
+    <p>Accepted formats: JPG, JPEG, PNG, HEIC</p>
+    <button id="upload_widget">Upload Photo</button>
+    <div id="status" role="status" aria-live="polite"></div>
+  </div>
 
-    <!-- Cloudinary Upload Widget -->
-    <script src="https://upload-widget.cloudinary.com/global/all.js" type="text/javascript"></script>
-
-    <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; padding: 24px; }
-      .wrap { max-width: 520px; margin: 0 auto; text-align: center; }
-      button { padding: 12px 18px; font-size: 16px; cursor: pointer; }
-      #status { margin-top: 16px; font-size: 14px; }
-    </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <h1>Upload your profile photo</h1>
-      <p>Accepted formats: JPG, JPEG, PNG, HEIC</p>
-
-      <button id="upload_widget">Upload Photo</button>
-      <div id="status" role="status" aria-live="polite"></div>
-    </div>
-
-    <script>
-      // OPTIONAL: if you pass ?member_id=12345 in the URL, we'll tag it too.
-      const params = new URLSearchParams(window.location.search);
-      const memberId = params.get("member_id");
-
-      const widget = cloudinary.createUploadWidget(
-        {
-          cloudName: "YOUR_CLOUD_NAME",
-          uploadPreset: "Member uploads",                // from your screenshot
-          multiple: false,                               // one headshot per member
-          clientAllowedFormats: ["jpg","jpeg","png","heic"],
-          tags: ["member-upload"].concat(memberId ? [memberId] : []),
-          sources: ["local", "camera", "url"],          // keep it simple for members
-          showCompletedButton: true,
-          showUploadMoreButton: false,
-        },
-        (error, result) => {
-          const status = document.getElementById("status");
-
-          if (error) {
-            console.error(error);
-            status.textContent = "Upload failed. Please try again.";
-            return;
-          }
-
-          if (result && result.event === "success") {
-            const info = result.info; // public_id, secure_url, etc.
-            status.textContent = "Upload successful! You may close this window.";
-
-            // OPTIONAL: redirect to your success page after 1.2s
-            // (The 'notification_url' in the preset is a webhook target, not a redirect.)
-            setTimeout(() => {
-              window.location.href = "https://www.ceo.org/successful-upload";
-            }, 1200);
-
-            // If you want to pass data back to Typeform (when embedded),
-            // you can postMessage here; Typeform can listen for it.
-            // window.parent.postMessage({ type: "cloudinary_upload", info }, "*");
-          }
+  <script>
+    const widget = cloudinary.createUploadWidget(
+      {
+        cloudName: "chief-executives-organization", // your cloud name
+        uploadPreset: "Member_uploads",             // your unsigned preset
+        folder: "home/headshots/Member upload",     // optional, from preset
+        tags: ["member-upload"],
+        multiple: false,
+        clientAllowedFormats: ["jpg","jpeg","png","heic"],
+        sources: ["local","camera","url"],
+        showCompletedButton: true,
+        showUploadMoreButton: false
+      },
+      (error, result) => {
+        const status = document.getElementById("status");
+        if (error) {
+          console.error(error);
+          status.textContent = "Upload failed. Please try again.";
+          return;
         }
-      );
+        if (result && result.event === "success") {
+          status.textContent = "Upload successful! You may close this window.";
+          setTimeout(() => { 
+            window.location.href = "https://www.ceo.org/successful-upload"; 
+          }, 1200);
+        }
+      }
+    );
 
-      document.getElementById("upload_widget").addEventListener("click", () => widget.open());
-    </script>
-  </body>
+    document.getElementById("upload_widget").addEventListener("click", () => widget.open());
+  </script>
+</body>
 </html>
