@@ -31,7 +31,6 @@
     .actions { margin-top:16px; display:flex; gap:12px; }
     button { padding:10px 16px; border-radius:10px; border:1px solid #d0d5dd; background:#111; color:#fff; cursor:pointer; font-size:15px; }
     button[disabled] { opacity:.5; cursor:not-allowed; }
-    .secondary { background:#fff; color:#111; }
     .status { margin-top: 16px; font-size: 14px; }
     .done { color: #0a7a2f; }
     .error { color: #b00020; white-space: pre-wrap; }
@@ -55,7 +54,7 @@
       <div class="full">
         <label for="memberId">Member ID (optional)</label>
         <input id="memberId" name="memberId" type="text" placeholder="e.g., 12345">
-        <div class="hint">If provided, we’ll tag/rename the photo with this ID.</div>
+        <div class="hint">If provided, we’ll tag the photo with this ID.</div>
       </div>
     </form>
 
@@ -89,7 +88,7 @@
       <div class="info">
         <div id="fileInfo" class="hint"></div>
         <div class="actions">
-          <button type="button" class="secondary" id="editBtn">Edit photo</button>
+          <!-- Edit controls are available inside the Uploadcare tile; users can reopen the editor there -->
           <button type="button" id="sendBtn" disabled>Send photo</button>
         </div>
       </div>
@@ -106,6 +105,11 @@
     const BASE_TAG              = "member-upload";
     const SUCCESS_REDIRECT      = "https://www.ceo.org/successful-upload";
 
+    // ====== Policy knobs (adjust if you want stricter checks) ======
+    const MIN_BYTES = 200 * 1024;          // 200 KB minimum
+    const MAX_BYTES = 10 * 1024 * 1024;    // 10 MB maximum
+    const MIN_W = 600, MIN_H = 600;        // minimum dimensions
+
     // ====== Elements ======
     const ctxEl     = document.getElementById("uploaderctx");
     const uploader  = document.getElementById("uploader");
@@ -113,12 +117,39 @@
     const $previewW = document.getElementById("previewWrap");
     const $preview  = document.getElementById("preview");
     const $fileInfo = document.getElementById("fileInfo");
-    const $editBtn  = document.getElementById("editBtn");
     const $sendBtn  = document.getElementById("sendBtn");
 
     const fullName  = document.getElementById("fullName");
     const email     = document.getElementById("email");
     const memberId  = document.getElementById("memberId");
+    const configEl  = document.querySelector("uc-config");
+
+    // ===== Validators (for Uploadcare WC) =====
+    const allowedTypes = new Set(["image/jpeg","image/png","image/heic","image/heif"]);
+    const imagesOnly = (entry) => {
+      if (!entry.isImage || (entry.mimeType && !allowedTypes.has(entry.mimeType))) {
+        return { message: "Please upload a JPG, PNG, or HEIC image." };
+      }
+    };
+    const minSize = (entry) => {
+      if (typeof entry.size === "number" && entry.size < MIN_BYTES) {
+        return { message: `Image is too small (min ${(MIN_BYTES/1024).toFixed(0)} KB).` };
+      }
+    };
+    const maxSize = (entry) => {
+      if (typeof entry.size === "number" && entry.size > MAX_BYTES) {
+        return { message: `Image is too large (max ${(MAX_BYTES/1024/1024).toFixed(1)} MB).` };
+      }
+    };
+    const minDimensions = (entry) => {
+      const info = entry.fileInfo?.imageInfo;
+      if (!info) return;
+      if (info.width < MIN_W || info.height < MIN_H) {
+        return { message: `Image must be at least ${MIN_W}×${MIN_H}px.` };
+      }
+    };
+    // Attach validators (set as property, not attribute)
+    configEl.fileValidators = [imagesOnly, minSize, maxSize, minDimensions];
 
     // ===== Helpers =====
     const slug = s => (s || "").toString().trim()
@@ -130,6 +161,7 @@
       let ok = true;
       if (!fullName.value.trim()) ok = false;
       if (!email.validity.valid) ok = false;
+      $sendBtn.disabled = !ok || !currentUrl;
       if (!ok) {
         $status.className = "status error";
         $status.textContent = "Please enter your Full name and a valid Email before sending.";
@@ -158,22 +190,26 @@
     }
 
     function buildPublicId() {
-      // Name-based filename: full-name[-memberid][-abc123]
+      // Name-based filename: full-name[-memberid]-abcd (small random suffix for uniqueness)
       const base = slug(fullName.value);
       const idPart = slug(memberId.value);
-      const rand = Math.random().toString(36).slice(2,6); // small suffix for uniqueness
+      const rand = Math.random().toString(36).slice(2,6);
       return [base, idPart || null, rand].filter(Boolean).join("-");
     }
 
+    // Put the folder path directly into public_id and disable filename derivation
     async function sendToCloudinary(remoteUrl) {
+      const folder = "home/headshots/Member upload".replace(/\/+$/,"");
+      const publicIdPath = `${folder}/${buildPublicId()}`;
+
       const form = new FormData();
-      form.append("file", remoteUrl);
-      form.append("upload_preset", CLOUDINARY_PRESET);
-      form.append("folder", CLOUDINARY_FOLDER);
-      form.append("tags", buildTags());
-      form.append("context", buildContextKV());
-      form.append("public_id", buildPublicId());      // <<< rename with full name
-      // Note: with explicit public_id, Cloudinary won't randomize the name
+      form.append("file", remoteUrl);                         // Uploadcare CDN URL (edited is fine)
+      form.append("upload_preset", "Member_uploads");         // your unsigned preset
+      form.append("public_id", publicIdPath);                 // force exact folder+filename
+      form.append("use_filename", "false");                   // don't derive from source URL
+      form.append("unique_filename", "false");                // we already add a random suffix
+      form.append("tags", buildTags());                       // e.g. "member-upload,member-12345"
+      form.append("context", buildContextKV());               // e.g. "full_name=...|email=...|member_id=..."
 
       const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: "POST", body: form });
       if (!res.ok) throw new Error(await res.text());
@@ -186,30 +222,21 @@
 
     // ===== Flow control =====
     let currentUrl = null;
-    let lastSize   = null;
 
     function showPreview(url, sizeText) {
-      $preview.src = url;
+      const previewEl = $preview;
+      // If Uploadcare gives a processed URL with transformations, use it directly
+      previewEl.src = url;
       $fileInfo.textContent = sizeText || "";
       $previewW.style.display = "flex";
-      $sendBtn.disabled = !validateForm();
+      validateForm();
     }
 
-    // Open the editor again if they want
-    $editBtn.addEventListener("click", () => {
-      // Trigger Uploadcare editor by re-opening the last file tile (WC handles it)
-      // Easiest: ask user to click the image tile; or re-run auto-open by resetting value.
-      uploader.value = ""; // clear value so user can reselect; editor will auto-open after select
-      $status.textContent = "Re-open the file to edit.";
-    });
-
     // Enable/disable Send button on form input changes
-    [fullName, email].forEach(el => el.addEventListener("input", () => {
-      if (currentUrl) $sendBtn.disabled = !validateForm();
-    }));
+    [fullName, email].forEach(el => el.addEventListener("input", validateForm));
 
     // User confirmation to send
-    $sendBtn.addEventListener("click", async () => {
+    document.getElementById("sendBtn").addEventListener("click", async () => {
       if (!currentUrl) return;
       if (!validateForm()) return;
 
@@ -227,15 +254,22 @@
       }
     });
 
-    // Listen on the Uploadcare context provider
+    // Listen on the Uploadcare context provider (v1 events fire here)
     function updateFromDetail(detail) {
+      // Stop if there are validation errors from Uploadcare
+      const errs = detail?.errors || [];
+      if (errs.length) {
+        $status.className = "status error";
+        $status.textContent = errs.map(er => er.message).join(" • ");
+        return;
+      }
+
       const url = extractUrl(detail);
       if (!url) return;
       currentUrl = url;
 
       const sizeBytes = detail?.size || detail?.file?.size;
-      lastSize = typeof sizeBytes === "number" ? sizeBytes : null;
-      const sizeText = lastSize ? `~ ${(lastSize/1024/1024).toFixed(2)} MB` : "";
+      const sizeText = typeof sizeBytes === "number" ? `~ ${(sizeBytes/1024/1024).toFixed(2)} MB` : "";
       showPreview(currentUrl, sizeText);
     }
 
