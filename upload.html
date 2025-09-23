@@ -6,10 +6,7 @@
   <title>Member Photo Upload</title>
 
   <!-- Uploadcare Web Component styles -->
-  <link
-    rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.css"
-  >
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.css">
 
   <!-- Uploadcare Web Components -->
   <script type="module">
@@ -18,7 +15,7 @@
   </script>
 
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 24px; background:#f6f7fb; color:#111; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin:0; padding:24px; background:#f6f7fb; color:#111; }
     .wrap { max-width: 640px; margin: 0 auto; }
     h1 { margin-bottom: 8px; }
     p  { margin-top: 0; color:#444; }
@@ -33,119 +30,84 @@
     <h1>Upload your profile photo</h1>
     <p>Accepted formats: JPG, JPEG, PNG, HEIC</p>
 
-    <!-- Uploadcare global config for this page -->
+    <!-- Uploadcare config -->
     <uc-config
       ctx-name="my-uploader"
       pubkey="0db3ca4d026eff0750b7"
       source-list="local, camera, facebook, gdrive"
       multiple="false"
-      img-only="true"
-    ></uc-config>
+      img-only="true">
+    </uc-config>
 
-    <!-- The actual uploader UI -->
-    <uc-file-uploader-regular
-      ctx-name="my-uploader"
-      class="uc-light"
-    ></uc-file-uploader-regular>
+    <!-- Uploader UI -->
+    <uc-file-uploader-regular ctx-name="my-uploader" class="uc-light"></uc-file-uploader-regular>
 
-    <!-- Context provider (required by Uploadcare WC) -->
-    <uc-upload-ctx-provider ctx-name="my-uploader"></uc-upload-ctx-provider>
+    <!-- Context provider (events fire here) -->
+    <uc-upload-ctx-provider id="uploaderctx" ctx-name="my-uploader"></uc-upload-ctx-provider>
 
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </div>
 
   <script>
-    // ---- Cloudinary settings for CEO ----
+    // ===== Cloudinary settings =====
     const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/chief-executives-organization/image/upload";
-    const CLOUDINARY_PRESET     = "Member_uploads";                    // unsigned preset
-    const CLOUDINARY_FOLDER     = "home/headshots/Member upload";      // optional (will also work from preset)
+    const CLOUDINARY_PRESET     = "Member_uploads";                 // unsigned preset
+    const CLOUDINARY_FOLDER     = "home/headshots/Member upload";   // optional (preset already routes)
     const CLOUDINARY_TAGS       = "member-upload";
     const SUCCESS_REDIRECT      = "https://www.ceo.org/successful-upload";
 
     const $status = document.getElementById("status");
+    const ctx     = document.getElementById("uploaderctx");
 
-    // Utility to push a remote file URL into Cloudinary (unsigned)
-    async function sendToCloudinary(remoteUrl, extraTags=[]) {
+    // Helper: push a remote file URL into Cloudinary (unsigned)
+    async function sendToCloudinary(remoteUrl, extraTags = []) {
       const form = new FormData();
-      form.append("file", remoteUrl);
+      form.append("file", remoteUrl);                 // Cloudinary fetches this URL server-side
       form.append("upload_preset", CLOUDINARY_PRESET);
       form.append("folder", CLOUDINARY_FOLDER);
       form.append("tags", [CLOUDINARY_TAGS, ...extraTags].join(","));
-
       const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: "POST", body: form });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Cloudinary upload failed");
-      }
+      if (!res.ok) throw new Error(await res.text());
       return res.json();
     }
 
-    // Try to extract a usable CDN URL from Uploadcare event payloads
-    function extractUploadcareUrl(detail) {
-      // Common possibilities across Uploadcare events
-      // Prefer a direct cdnUrl if present
+    function getCdnUrlFromDetail(detail) {
       if (detail?.cdnUrl) return detail.cdnUrl;
       if (detail?.file?.cdnUrl) return detail.file.cdnUrl;
-
-      // If we only have a UUID, build the URL
       const uuid = detail?.uuid || detail?.file?.uuid || detail?.data?.uuid;
-      if (uuid) return `https://ucarecdn.com/${uuid}/`;
-
-      return null;
+      return uuid ? `https://ucarecdn.com/${uuid}/` : null;
     }
 
-    // Listen for success events from the Uploadcare Web Component
-    // Different versions may emit slightly different event names; we subscribe to a few.
-    const ucEl = document.querySelector("uc-file-uploader-regular");
-    const possibleEvents = [
-      "file-upload-success",   // commonly emitted with { cdnUrl, uuid, ... }
-      "upload-success",
-      "file-ready",
-      "change"                 // fallback: inspect value for file data
-    ];
+    let forwarded = false; // guard against double-sends from multiple events
 
-    possibleEvents.forEach(evtName => {
-      ucEl.addEventListener(evtName, async (evt) => {
-        try {
-          // Ignore non-final states for 'change'
-          if (evtName === "change" && !evt?.detail) return;
+    async function forwardIfReady(detail) {
+      if (forwarded) return;
+      const url = getCdnUrlFromDetail(detail);
+      if (!url) return; // not ready yet
 
-          const url = extractUploadcareUrl(evt.detail);
-          if (!url) {
-            // If 'change' provides a list, try to read first item
-            const maybeList = evt?.detail?.value || evt?.detail?.files;
-            const first = Array.isArray(maybeList) ? maybeList[0] : null;
-            const fallbackUrl = extractUploadcareUrl(first || {});
-            if (!fallbackUrl) return; // not ready yet
-            await handleForward(fallbackUrl);
-          } else {
-            await handleForward(url);
-          }
-        } catch (err) {
-          $status.className = "status error";
-          $status.textContent = "Upload error: " + (err?.message || err);
-          console.error(err);
-        }
-      });
+      forwarded = true;
+      try {
+        $status.textContent = "Uploading to Cloudinary…";
+        await sendToCloudinary(url);
+        $status.className = "status done";
+        $status.textContent = "Upload successful! Redirecting…";
+        setTimeout(() => { window.location.href = SUCCESS_REDIRECT; }, 900);
+      } catch (err) {
+        forwarded = false; // allow retry
+        console.error(err);
+        $status.className = "status error";
+        $status.textContent = "Upload error: " + (err?.message || err);
+      }
+    }
+
+    // Listen on the CONTEXT PROVIDER (Uploadcare v1 behavior)
+    ctx.addEventListener("file-upload-success", (e) => forwardIfReady(e.detail));
+    ctx.addEventListener("file-url-changed",   (e) => forwardIfReady(e.detail));   // picks up editor changes
+    ctx.addEventListener("common-upload-success", (e) => {
+      // batch-success: take the first successful entry
+      const first = e?.detail?.successEntries?.[0];
+      if (first) forwardIfReady(first);
     });
-
-    async function handleForward(uploadcareCdnUrl) {
-      // Prevent double-submission if multiple events fire
-      if (ucEl.__forwarding) return;
-      ucEl.__forwarding = true;
-
-      $status.className = "status";
-      $status.textContent = "Uploading to Cloudinary…";
-
-      const result = await sendToCloudinary(uploadcareCdnUrl);
-      console.log("Cloudinary result:", result);
-
-      $status.className = "status done";
-      $status.textContent = "Upload successful! Redirecting…";
-
-      // Gentle redirect for a clean UX
-      setTimeout(() => { window.location.href = SUCCESS_REDIRECT; }, 900);
-    }
   </script>
 </body>
 </html>
