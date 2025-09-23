@@ -17,7 +17,7 @@
 
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin:0; padding:24px; background:#f6f7fb; color:#111; }
-    .wrap { max-width: 680px; margin: 0 auto; }
+    .wrap { max-width: 720px; margin: 0 auto; }
     h1 { margin-bottom: 8px; }
     p  { margin-top: 0; color:#444; }
     form { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
@@ -25,10 +25,16 @@
     label { font-size:14px; color:#333; display:block; margin-bottom:4px; }
     input { width:100%; padding:10px 12px; border:1px solid #d0d5dd; border-radius:8px; font-size:16px; box-sizing:border-box; }
     .hint { font-size:12px; color:#666; margin-top:4px; }
+    uc-file-uploader-regular { display:block; margin-top:16px; }
+    .preview { margin-top:16px; display:flex; align-items:center; gap:16px; }
+    .preview img { max-width:180px; border-radius:12px; border:1px solid #e5e7eb; }
+    .actions { margin-top:16px; display:flex; gap:12px; }
+    button { padding:10px 16px; border-radius:10px; border:1px solid #d0d5dd; background:#111; color:#fff; cursor:pointer; font-size:15px; }
+    button[disabled] { opacity:.5; cursor:not-allowed; }
+    .secondary { background:#fff; color:#111; }
     .status { margin-top: 16px; font-size: 14px; }
     .done { color: #0a7a2f; }
     .error { color: #b00020; white-space: pre-wrap; }
-    uc-file-uploader-regular { display:block; margin-top:16px; }
   </style>
 </head>
 <body>
@@ -36,26 +42,24 @@
     <h1>Upload your profile photo</h1>
     <p>Accepted: JPG, JPEG, PNG, HEIC • Min 600×600 • 1:1 crop</p>
 
-    <!-- Collect required member info right on this page -->
+    <!-- Required member info -->
     <form id="memberForm" novalidate>
       <div class="full">
         <label for="fullName">Full name *</label>
         <input id="fullName" name="fullName" type="text" required placeholder="e.g., Maria Silva">
       </div>
-
       <div class="full">
         <label for="email">Email *</label>
         <input id="email" name="email" type="email" required placeholder="name@example.com">
       </div>
-
       <div class="full">
         <label for="memberId">Member ID (optional)</label>
         <input id="memberId" name="memberId" type="text" placeholder="e.g., 12345">
-        <div class="hint">If provided, we’ll tag the photo with this ID.</div>
+        <div class="hint">If provided, we’ll tag/rename the photo with this ID.</div>
       </div>
     </form>
 
-    <!-- Uploadcare config -->
+    <!-- Uploadcare config (with editor) -->
     <uc-config
       ctx-name="my-uploader"
       pubkey="0db3ca4d026eff0750b7"
@@ -74,10 +78,22 @@
     </uc-config>
 
     <!-- Uploader UI -->
-    <uc-file-uploader-regular ctx-name="my-uploader" class="uc-light"></uc-file-uploader-regular>
+    <uc-file-uploader-regular id="uploader" ctx-name="my-uploader" class="uc-light"></uc-file-uploader-regular>
 
     <!-- Context provider (events fire here) -->
     <uc-upload-ctx-provider id="uploaderctx" ctx-name="my-uploader"></uc-upload-ctx-provider>
+
+    <!-- Live preview + actions -->
+    <div class="preview" id="previewWrap" style="display:none">
+      <img id="preview" alt="Selected photo preview">
+      <div class="info">
+        <div id="fileInfo" class="hint"></div>
+        <div class="actions">
+          <button type="button" class="secondary" id="editBtn">Edit photo</button>
+          <button type="button" id="sendBtn" disabled>Send photo</button>
+        </div>
+      </div>
+    </div>
 
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </div>
@@ -86,19 +102,29 @@
     // ====== Cloudinary (your org) ======
     const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/chief-executives-organization/image/upload";
     const CLOUDINARY_PRESET     = "Member_uploads";                 // unsigned preset
-    const CLOUDINARY_FOLDER     = "home/headshots/Member upload";   // optional (preset can route)
+    const CLOUDINARY_FOLDER     = "home/headshots/Member upload";   // folder
     const BASE_TAG              = "member-upload";
     const SUCCESS_REDIRECT      = "https://www.ceo.org/successful-upload";
 
-    const $status  = document.getElementById("status");
-    const ctxEl    = document.getElementById("uploaderctx");
-    const formEl   = document.getElementById("memberForm");
-    const fullName = document.getElementById("fullName");
-    const email    = document.getElementById("email");
-    const memberId = document.getElementById("memberId");
+    // ====== Elements ======
+    const ctxEl     = document.getElementById("uploaderctx");
+    const uploader  = document.getElementById("uploader");
+    const $status   = document.getElementById("status");
+    const $previewW = document.getElementById("previewWrap");
+    const $preview  = document.getElementById("preview");
+    const $fileInfo = document.getElementById("fileInfo");
+    const $editBtn  = document.getElementById("editBtn");
+    const $sendBtn  = document.getElementById("sendBtn");
 
-    // ——— helpers ———
-    const slug = s => (s || "").toString().trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
+    const fullName  = document.getElementById("fullName");
+    const email     = document.getElementById("email");
+    const memberId  = document.getElementById("memberId");
+
+    // ===== Helpers =====
+    const slug = s => (s || "").toString().trim()
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g,"")   // strip accents
+      .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
 
     function validateForm() {
       let ok = true;
@@ -106,7 +132,7 @@
       if (!email.validity.valid) ok = false;
       if (!ok) {
         $status.className = "status error";
-        $status.textContent = "Please enter your Full name and a valid Email before uploading.";
+        $status.textContent = "Please enter your Full name and a valid Email before sending.";
       } else {
         $status.className = "status";
         $status.textContent = "";
@@ -121,7 +147,7 @@
       ];
       const id = memberId.value.trim();
       if (id) pairs.push(`member_id=${encodeURIComponent(id)}`);
-      return pairs.join("|"); // Cloudinary expects key=value|key=value
+      return pairs.join("|"); // Cloudinary context format
     }
 
     function buildTags() {
@@ -131,13 +157,23 @@
       return tags.join(",");
     }
 
+    function buildPublicId() {
+      // Name-based filename: full-name[-memberid][-abc123]
+      const base = slug(fullName.value);
+      const idPart = slug(memberId.value);
+      const rand = Math.random().toString(36).slice(2,6); // small suffix for uniqueness
+      return [base, idPart || null, rand].filter(Boolean).join("-");
+    }
+
     async function sendToCloudinary(remoteUrl) {
       const form = new FormData();
       form.append("file", remoteUrl);
       form.append("upload_preset", CLOUDINARY_PRESET);
       form.append("folder", CLOUDINARY_FOLDER);
       form.append("tags", buildTags());
-      form.append("context", buildContextKV());   // <- stores Full name + Email (+ optional Member ID)
+      form.append("context", buildContextKV());
+      form.append("public_id", buildPublicId());      // <<< rename with full name
+      // Note: with explicit public_id, Cloudinary won't randomize the name
 
       const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: "POST", body: form });
       if (!res.ok) throw new Error(await res.text());
@@ -148,42 +184,67 @@
       return detail?.cdnUrl || detail?.file?.cdnUrl || (detail?.uuid ? `https://ucarecdn.com/${detail.uuid}/` : null);
     }
 
-    let forwarded = false;
+    // ===== Flow control =====
+    let currentUrl = null;
+    let lastSize   = null;
 
-    async function forwardIfReady(detail) {
-      if (forwarded) return;
+    function showPreview(url, sizeText) {
+      $preview.src = url;
+      $fileInfo.textContent = sizeText || "";
+      $previewW.style.display = "flex";
+      $sendBtn.disabled = !validateForm();
+    }
+
+    // Open the editor again if they want
+    $editBtn.addEventListener("click", () => {
+      // Trigger Uploadcare editor by re-opening the last file tile (WC handles it)
+      // Easiest: ask user to click the image tile; or re-run auto-open by resetting value.
+      uploader.value = ""; // clear value so user can reselect; editor will auto-open after select
+      $status.textContent = "Re-open the file to edit.";
+    });
+
+    // Enable/disable Send button on form input changes
+    [fullName, email].forEach(el => el.addEventListener("input", () => {
+      if (currentUrl) $sendBtn.disabled = !validateForm();
+    }));
+
+    // User confirmation to send
+    $sendBtn.addEventListener("click", async () => {
+      if (!currentUrl) return;
       if (!validateForm()) return;
 
-      const url = extractUrl(detail);
-      if (!url) return; // not ready yet
-
-      forwarded = true;
       try {
         $status.className = "status";
         $status.textContent = "Uploading to Cloudinary…";
-        await sendToCloudinary(url);
+        await sendToCloudinary(currentUrl);
         $status.className = "status done";
         $status.textContent = "Upload successful! Redirecting…";
         setTimeout(() => { window.location.href = SUCCESS_REDIRECT; }, 900);
       } catch (err) {
-        forwarded = false;
         console.error(err);
         $status.className = "status error";
         $status.textContent = "Upload error: " + (err?.message || err);
       }
-    }
-
-    // Listen on the context provider (Uploadcare v1 events)
-    ctxEl.addEventListener("file-upload-success", (e) => forwardIfReady(e.detail));
-    ctxEl.addEventListener("file-url-changed",   (e) => forwardIfReady(e.detail));
-    ctxEl.addEventListener("common-upload-success", (e) => {
-      const first = e?.detail?.successEntries?.[0];
-      if (first) forwardIfReady(first);
     });
 
-    // Light real-time validation hints
-    fullName.addEventListener("input", validateForm);
-    email.addEventListener("input", validateForm);
+    // Listen on the Uploadcare context provider
+    function updateFromDetail(detail) {
+      const url = extractUrl(detail);
+      if (!url) return;
+      currentUrl = url;
+
+      const sizeBytes = detail?.size || detail?.file?.size;
+      lastSize = typeof sizeBytes === "number" ? sizeBytes : null;
+      const sizeText = lastSize ? `~ ${(lastSize/1024/1024).toFixed(2)} MB` : "";
+      showPreview(currentUrl, sizeText);
+    }
+
+    ctxEl.addEventListener("file-upload-success", (e) => updateFromDetail(e.detail));
+    ctxEl.addEventListener("file-url-changed",   (e) => updateFromDetail(e.detail)); // fires after edits
+    ctxEl.addEventListener("common-upload-success", (e) => {
+      const first = e?.detail?.successEntries?.[0];
+      if (first) updateFromDetail(first);
+    });
   </script>
 </body>
 </html>
