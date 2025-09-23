@@ -17,9 +17,14 @@
 
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin:0; padding:24px; background:#f6f7fb; color:#111; }
-    .wrap { max-width: 640px; margin: 0 auto; }
+    .wrap { max-width: 680px; margin: 0 auto; }
     h1 { margin-bottom: 8px; }
     p  { margin-top: 0; color:#444; }
+    form { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
+    form .full { grid-column: 1 / -1; }
+    label { font-size:14px; color:#333; display:block; margin-bottom:4px; }
+    input { width:100%; padding:10px 12px; border:1px solid #d0d5dd; border-radius:8px; font-size:16px; box-sizing:border-box; }
+    .hint { font-size:12px; color:#666; margin-top:4px; }
     .status { margin-top: 16px; font-size: 14px; }
     .done { color: #0a7a2f; }
     .error { color: #b00020; white-space: pre-wrap; }
@@ -29,7 +34,26 @@
 <body>
   <div class="wrap">
     <h1>Upload your profile photo</h1>
-    <p>Accepted: JPG, JPEG, PNG, HEIC/HEIF • Min 600×600 • 1:1 crop</p>
+    <p>Accepted: JPG, JPEG, PNG, HEIC • Min 600×600 • 1:1 crop</p>
+
+    <!-- Collect required member info right on this page -->
+    <form id="memberForm" novalidate>
+      <div class="full">
+        <label for="fullName">Full name *</label>
+        <input id="fullName" name="fullName" type="text" required placeholder="e.g., Maria Silva">
+      </div>
+
+      <div class="full">
+        <label for="email">Email *</label>
+        <input id="email" name="email" type="email" required placeholder="name@example.com">
+      </div>
+
+      <div class="full">
+        <label for="memberId">Member ID (optional)</label>
+        <input id="memberId" name="memberId" type="text" placeholder="e.g., 12345">
+        <div class="hint">If provided, we’ll tag the photo with this ID.</div>
+      </div>
+    </form>
 
     <!-- Uploadcare config -->
     <uc-config
@@ -40,16 +64,12 @@
       img-only="true"
       accept="image/jpeg,image/png,image/heic,image/heif"
 
-      <!-- Enforce editor + tabs + aspect ratio -->
       use-cloud-image-editor="true"
       cloud-image-editor-tabs="crop"
       crop-preset="1:1"
       cloud-image-editor-auto-open="true"
 
-      <!-- Optional: shrink big images client-side before upload -->
       image-shrink="1600x1600 90%"
-
-      <!-- Optional: block very large locals right away (10 MB) -->
       max-local-file-size-bytes="10485760">
     </uc-config>
 
@@ -63,78 +83,65 @@
   </div>
 
   <script>
-    // ====== Policy knobs (adjust to taste) ======
-    const MIN_BYTES = 200 * 1024;          // 200 KB minimum
-    const MAX_BYTES = 10 * 1024 * 1024;    // 10 MB maximum
-    const MIN_W = 600, MIN_H = 600;        // minimum dimensions
-
-    // ====== Cloudinary settings (your org) ======
+    // ====== Cloudinary (your org) ======
     const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/chief-executives-organization/image/upload";
     const CLOUDINARY_PRESET     = "Member_uploads";                 // unsigned preset
-    const CLOUDINARY_FOLDER     = "home/headshots/Member upload";   // optional (preset can handle it)
-    const CLOUDINARY_TAGS       = "member-upload";
+    const CLOUDINARY_FOLDER     = "home/headshots/Member upload";   // optional (preset can route)
+    const BASE_TAG              = "member-upload";
     const SUCCESS_REDIRECT      = "https://www.ceo.org/successful-upload";
 
-    const $status = document.getElementById("status");
-    const ctxEl   = document.getElementById("uploaderctx");
-    const config  = document.querySelector("uc-config");
+    const $status  = document.getElementById("status");
+    const ctxEl    = document.getElementById("uploaderctx");
+    const formEl   = document.getElementById("memberForm");
+    const fullName = document.getElementById("fullName");
+    const email    = document.getElementById("email");
+    const memberId = document.getElementById("memberId");
 
-    // ---- Validators (must be synchronous per Uploadcare API) ----
-    // Size checks (available before upload via OutputFileEntry.size)
-    const minSize = (entry, api) => {
-      if (typeof entry.size === "number" && entry.size < MIN_BYTES) {
-        return { message: `Image is too small (min ${(MIN_BYTES/1024).toFixed(0)} KB).` };
-      }
-    };
-    const maxSize = (entry, api) => {
-      if (typeof entry.size === "number" && entry.size > MAX_BYTES) {
-        return { message: `Image is too large (max ${(MAX_BYTES/1024/1024).toFixed(1)} MB).` };
-      }
-    };
-    // File type guard (images only + allowed mimes)
-    const allowedTypes = new Set(["image/jpeg","image/png","image/heic","image/heif"]);
-    const imagesOnly = (entry, api) => {
-      if (!entry.isImage || (entry.mimeType && !allowedTypes.has(entry.mimeType))) {
-        return { message: "Please upload a JPG, PNG, or HEIC image." };
-      }
-    };
-    // Dimension check: needs fileInfo (available after successful upload)
-    const minDimensions = (entry, api) => {
-      // Only validate when we have server-side image info (after upload success)
-      const info = entry.fileInfo?.imageInfo;
-      if (!info) return;
-      if (info.width < MIN_W || info.height < MIN_H) {
-        return { message: `Image must be at least ${MIN_W}×${MIN_H}px.` };
-      }
-    };
+    // ——— helpers ———
+    const slug = s => (s || "").toString().trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
 
-    // Attach validators to config (WC uses DOM property, not attribute)
-    config.fileValidators = [imagesOnly, minSize, maxSize, minDimensions];
-
-    // Show validation errors coming from Uploadcare
-    ctxEl.addEventListener("change", (e) => {
-      const errs = e?.detail?.errors || [];
-      if (errs.length) {
+    function validateForm() {
+      let ok = true;
+      if (!fullName.value.trim()) ok = false;
+      if (!email.validity.valid) ok = false;
+      if (!ok) {
         $status.className = "status error";
-        $status.textContent = errs.map(er => er.message).join(" • ");
+        $status.textContent = "Please enter your Full name and a valid Email before uploading.";
+      } else {
+        $status.className = "status";
+        $status.textContent = "";
       }
-    });
+      return ok;
+    }
 
-    // ====== Forward to Cloudinary only if no errors ======
-    async function sendToCloudinary(remoteUrl, extraTags = []) {
+    function buildContextKV() {
+      const pairs = [
+        `full_name=${encodeURIComponent(fullName.value.trim())}`,
+        `email=${encodeURIComponent(email.value.trim())}`
+      ];
+      const id = memberId.value.trim();
+      if (id) pairs.push(`member_id=${encodeURIComponent(id)}`);
+      return pairs.join("|"); // Cloudinary expects key=value|key=value
+    }
+
+    function buildTags() {
+      const tags = [BASE_TAG];
+      const id = slug(memberId.value);
+      if (id) tags.push(`member-${id}`);
+      return tags.join(",");
+    }
+
+    async function sendToCloudinary(remoteUrl) {
       const form = new FormData();
       form.append("file", remoteUrl);
       form.append("upload_preset", CLOUDINARY_PRESET);
       form.append("folder", CLOUDINARY_FOLDER);
-      form.append("tags", [CLOUDINARY_TAGS, ...extraTags].join(","));
+      form.append("tags", buildTags());
+      form.append("context", buildContextKV());   // <- stores Full name + Email (+ optional Member ID)
+
       const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: "POST", body: form });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
-    }
-
-    function entryHasErrors(detail) {
-      const errs = detail?.errors || [];
-      return errs.length > 0;
     }
 
     function extractUrl(detail) {
@@ -145,7 +152,7 @@
 
     async function forwardIfReady(detail) {
       if (forwarded) return;
-      if (entryHasErrors(detail)) return; // don't forward invalid entries
+      if (!validateForm()) return;
 
       const url = extractUrl(detail);
       if (!url) return; // not ready yet
@@ -166,13 +173,17 @@
       }
     }
 
-    // Listen on the context provider (v1 events fire here)
+    // Listen on the context provider (Uploadcare v1 events)
     ctxEl.addEventListener("file-upload-success", (e) => forwardIfReady(e.detail));
     ctxEl.addEventListener("file-url-changed",   (e) => forwardIfReady(e.detail));
     ctxEl.addEventListener("common-upload-success", (e) => {
       const first = e?.detail?.successEntries?.[0];
       if (first) forwardIfReady(first);
     });
+
+    // Light real-time validation hints
+    fullName.addEventListener("input", validateForm);
+    email.addEventListener("input", validateForm);
   </script>
 </body>
 </html>
