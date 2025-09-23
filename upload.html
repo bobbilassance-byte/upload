@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Member Photo Uploadssss</title>
+  <title>Member Photo Upload</title>
 
   <!-- Uploadcare Web Component styles -->
   <link rel="stylesheet"
@@ -169,13 +169,19 @@
       return ok;
     }
 
+    // ---- FIXED: send plain text (no URL encoding) so spaces/@ show correctly in Context
     function buildContextKV() {
+      const sanitize = (s = "") => s.toString().trim().replace(/[|=]/g, "-");
+      const name = sanitize(fullName.value);
+      const mail = sanitize(email.value);
+      const id   = sanitize(memberId.value);
+
       const pairs = [
-        `full_name=${encodeURIComponent(fullName.value.trim())}`,
-        `email=${encodeURIComponent(email.value.trim())}`
+        `full_name=${name}`,
+        `email=${mail}`
       ];
-      const id = memberId.value.trim();
-      if (id) pairs.push(`member_id=${encodeURIComponent(id)}`);
+      if (id) pairs.push(`member_id=${id}`);
+
       return pairs.join("|"); // Cloudinary context format
     }
 
@@ -194,7 +200,7 @@
       return [base, idPart || null, rand].filter(Boolean).join("-");
     }
 
-    // Send to Cloudinary: force exact folder+filename, no "preview" name
+    // Send to Cloudinary: force exact folder+filename, avoid "preview"
     async function sendToCloudinary(remoteUrl) {
       const folder     = "home/headshots/Member upload".replace(/\/+$/,"");
       const baseName   = buildPublicBase();                 // e.g. maria-silva-12345-ab3d
@@ -251,7 +257,6 @@
 
     // Listen on the Uploadcare context provider (v1 events)
     function updateFromDetail(detail) {
-      // Stop if there are validation errors from Uploadcare
       const errs = detail?.errors || [];
       if (errs.length) {
         $status.className = "status error";
