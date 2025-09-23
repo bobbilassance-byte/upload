@@ -54,7 +54,7 @@
       <div class="full">
         <label for="memberId">Member ID (optional)</label>
         <input id="memberId" name="memberId" type="text" placeholder="e.g., 12345">
-        <div class="hint">If provided, we’ll tag the photo with this ID.</div>
+        <div class="hint">If provided, we’ll tag the photo with this ID. Tip: click the thumbnail to re-open the editor.</div>
       </div>
     </form>
 
@@ -88,7 +88,6 @@
       <div class="info">
         <div id="fileInfo" class="hint"></div>
         <div class="actions">
-          <!-- Edit controls are available inside the Uploadcare tile; users can reopen the editor there -->
           <button type="button" id="sendBtn" disabled>Send photo</button>
         </div>
       </div>
@@ -158,9 +157,7 @@
       .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
 
     function validateForm() {
-      let ok = true;
-      if (!fullName.value.trim()) ok = false;
-      if (!email.validity.valid) ok = false;
+      const ok = !!fullName.value.trim() && email.validity.valid;
       $sendBtn.disabled = !ok || !currentUrl;
       if (!ok) {
         $status.className = "status error";
@@ -189,7 +186,7 @@
       return tags.join(",");
     }
 
-    function buildPublicId() {
+    function buildPublicBase() {
       // Name-based filename: full-name[-memberid]-abcd (small random suffix for uniqueness)
       const base = slug(fullName.value);
       const idPart = slug(memberId.value);
@@ -197,19 +194,19 @@
       return [base, idPart || null, rand].filter(Boolean).join("-");
     }
 
-    // Put the folder path directly into public_id and disable filename derivation
+    // Send to Cloudinary: force exact folder+filename, no "preview" name
     async function sendToCloudinary(remoteUrl) {
-      const folder = "home/headshots/Member upload".replace(/\/+$/,"");
-      const publicIdPath = `${folder}/${buildPublicId()}`;
+      const folder     = "home/headshots/Member upload".replace(/\/+$/,"");
+      const baseName   = buildPublicBase();                 // e.g. maria-silva-12345-ab3d
+      const publicPath = `${folder}/${baseName}`;           // full public_id with folder
 
       const form = new FormData();
-      form.append("file", remoteUrl);                         // Uploadcare CDN URL (edited is fine)
-      form.append("upload_preset", "Member_uploads");         // your unsigned preset
-      form.append("public_id", publicIdPath);                 // force exact folder+filename
-      form.append("use_filename", "false");                   // don't derive from source URL
-      form.append("unique_filename", "false");                // we already add a random suffix
-      form.append("tags", buildTags());                       // e.g. "member-upload,member-12345"
-      form.append("context", buildContextKV());               // e.g. "full_name=...|email=...|member_id=..."
+      form.append("file", remoteUrl);                       // Uploadcare CDN URL (edited is fine)
+      form.append("upload_preset", "Member_uploads");       // your unsigned preset
+      form.append("public_id", publicPath);                 // force exact folder+filename
+      form.append("filename_override", baseName);           // avoid source-name (e.g., "preview")
+      form.append("tags", buildTags());                     // e.g. "member-upload,member-12345"
+      form.append("context", buildContextKV());             // e.g. "full_name=...|email=...|member_id=..."
 
       const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: "POST", body: form });
       if (!res.ok) throw new Error(await res.text());
@@ -224,9 +221,7 @@
     let currentUrl = null;
 
     function showPreview(url, sizeText) {
-      const previewEl = $preview;
-      // If Uploadcare gives a processed URL with transformations, use it directly
-      previewEl.src = url;
+      $preview.src = url;
       $fileInfo.textContent = sizeText || "";
       $previewW.style.display = "flex";
       validateForm();
@@ -254,7 +249,7 @@
       }
     });
 
-    // Listen on the Uploadcare context provider (v1 events fire here)
+    // Listen on the Uploadcare context provider (v1 events)
     function updateFromDetail(detail) {
       // Stop if there are validation errors from Uploadcare
       const errs = detail?.errors || [];
