@@ -6,7 +6,8 @@
   <title>Member Photo Upload</title>
 
   <!-- Uploadcare Web Component styles -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.css">
 
   <!-- Uploadcare Web Components -->
   <script type="module">
@@ -28,8 +29,7 @@
 <body>
   <div class="wrap">
     <h1>Upload your profile photo</h1>
-    <p>Please, rename your file with your full name </p>
-    <p>Accepted formats: JPG, JPEG, PNG, HEIC</p>
+    <p>Accepted: JPG, JPEG, PNG, HEIC/HEIF • Min 600×600 • 1:1 crop</p>
 
     <!-- Uploadcare config -->
     <uc-config
@@ -37,7 +37,20 @@
       pubkey="0db3ca4d026eff0750b7"
       source-list="local, camera, facebook, gdrive"
       multiple="false"
-      img-only="true">
+      img-only="true"
+      accept="image/jpeg,image/png,image/heic,image/heif"
+
+      <!-- Enforce editor + tabs + aspect ratio -->
+      use-cloud-image-editor="true"
+      cloud-image-editor-tabs="crop"
+      crop-preset="1:1"
+      cloud-image-editor-auto-open="true"
+
+      <!-- Optional: shrink big images client-side before upload -->
+      image-shrink="1600x1600 90%"
+
+      <!-- Optional: block very large locals right away (10 MB) -->
+      max-local-file-size-bytes="10485760">
     </uc-config>
 
     <!-- Uploader UI -->
@@ -50,20 +63,67 @@
   </div>
 
   <script>
-    // ===== Cloudinary settings =====
+    // ====== Policy knobs (adjust to taste) ======
+    const MIN_BYTES = 200 * 1024;          // 200 KB minimum
+    const MAX_BYTES = 10 * 1024 * 1024;    // 10 MB maximum
+    const MIN_W = 600, MIN_H = 600;        // minimum dimensions
+
+    // ====== Cloudinary settings (your org) ======
     const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/chief-executives-organization/image/upload";
     const CLOUDINARY_PRESET     = "Member_uploads";                 // unsigned preset
-    const CLOUDINARY_FOLDER     = "home/headshots/Member upload";   // optional (preset already routes)
+    const CLOUDINARY_FOLDER     = "home/headshots/Member upload";   // optional (preset can handle it)
     const CLOUDINARY_TAGS       = "member-upload";
     const SUCCESS_REDIRECT      = "https://www.ceo.org/successful-upload";
 
     const $status = document.getElementById("status");
-    const ctx     = document.getElementById("uploaderctx");
+    const ctxEl   = document.getElementById("uploaderctx");
+    const config  = document.querySelector("uc-config");
 
-    // Helper: push a remote file URL into Cloudinary (unsigned)
+    // ---- Validators (must be synchronous per Uploadcare API) ----
+    // Size checks (available before upload via OutputFileEntry.size)
+    const minSize = (entry, api) => {
+      if (typeof entry.size === "number" && entry.size < MIN_BYTES) {
+        return { message: `Image is too small (min ${(MIN_BYTES/1024).toFixed(0)} KB).` };
+      }
+    };
+    const maxSize = (entry, api) => {
+      if (typeof entry.size === "number" && entry.size > MAX_BYTES) {
+        return { message: `Image is too large (max ${(MAX_BYTES/1024/1024).toFixed(1)} MB).` };
+      }
+    };
+    // File type guard (images only + allowed mimes)
+    const allowedTypes = new Set(["image/jpeg","image/png","image/heic","image/heif"]);
+    const imagesOnly = (entry, api) => {
+      if (!entry.isImage || (entry.mimeType && !allowedTypes.has(entry.mimeType))) {
+        return { message: "Please upload a JPG, PNG, or HEIC image." };
+      }
+    };
+    // Dimension check: needs fileInfo (available after successful upload)
+    const minDimensions = (entry, api) => {
+      // Only validate when we have server-side image info (after upload success)
+      const info = entry.fileInfo?.imageInfo;
+      if (!info) return;
+      if (info.width < MIN_W || info.height < MIN_H) {
+        return { message: `Image must be at least ${MIN_W}×${MIN_H}px.` };
+      }
+    };
+
+    // Attach validators to config (WC uses DOM property, not attribute)
+    config.fileValidators = [imagesOnly, minSize, maxSize, minDimensions];
+
+    // Show validation errors coming from Uploadcare
+    ctxEl.addEventListener("change", (e) => {
+      const errs = e?.detail?.errors || [];
+      if (errs.length) {
+        $status.className = "status error";
+        $status.textContent = errs.map(er => er.message).join(" • ");
+      }
+    });
+
+    // ====== Forward to Cloudinary only if no errors ======
     async function sendToCloudinary(remoteUrl, extraTags = []) {
       const form = new FormData();
-      form.append("file", remoteUrl);                 // Cloudinary fetches this URL server-side
+      form.append("file", remoteUrl);
       form.append("upload_preset", CLOUDINARY_PRESET);
       form.append("folder", CLOUDINARY_FOLDER);
       form.append("tags", [CLOUDINARY_TAGS, ...extraTags].join(","));
@@ -72,40 +132,44 @@
       return res.json();
     }
 
-    function getCdnUrlFromDetail(detail) {
-      if (detail?.cdnUrl) return detail.cdnUrl;
-      if (detail?.file?.cdnUrl) return detail.file.cdnUrl;
-      const uuid = detail?.uuid || detail?.file?.uuid || detail?.data?.uuid;
-      return uuid ? `https://ucarecdn.com/${uuid}/` : null;
+    function entryHasErrors(detail) {
+      const errs = detail?.errors || [];
+      return errs.length > 0;
     }
 
-    let forwarded = false; // guard against double-sends from multiple events
+    function extractUrl(detail) {
+      return detail?.cdnUrl || detail?.file?.cdnUrl || (detail?.uuid ? `https://ucarecdn.com/${detail.uuid}/` : null);
+    }
+
+    let forwarded = false;
 
     async function forwardIfReady(detail) {
       if (forwarded) return;
-      const url = getCdnUrlFromDetail(detail);
+      if (entryHasErrors(detail)) return; // don't forward invalid entries
+
+      const url = extractUrl(detail);
       if (!url) return; // not ready yet
 
       forwarded = true;
       try {
+        $status.className = "status";
         $status.textContent = "Uploading to Cloudinary…";
         await sendToCloudinary(url);
         $status.className = "status done";
         $status.textContent = "Upload successful! Redirecting…";
         setTimeout(() => { window.location.href = SUCCESS_REDIRECT; }, 900);
       } catch (err) {
-        forwarded = false; // allow retry
+        forwarded = false;
         console.error(err);
         $status.className = "status error";
         $status.textContent = "Upload error: " + (err?.message || err);
       }
     }
 
-    // Listen on the CONTEXT PROVIDER (Uploadcare v1 behavior)
-    ctx.addEventListener("file-upload-success", (e) => forwardIfReady(e.detail));
-    ctx.addEventListener("file-url-changed",   (e) => forwardIfReady(e.detail));   // picks up editor changes
-    ctx.addEventListener("common-upload-success", (e) => {
-      // batch-success: take the first successful entry
+    // Listen on the context provider (v1 events fire here)
+    ctxEl.addEventListener("file-upload-success", (e) => forwardIfReady(e.detail));
+    ctxEl.addEventListener("file-url-changed",   (e) => forwardIfReady(e.detail));
+    ctxEl.addEventListener("common-upload-success", (e) => {
       const first = e?.detail?.successEntries?.[0];
       if (first) forwardIfReady(first);
     });
