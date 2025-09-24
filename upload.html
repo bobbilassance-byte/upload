@@ -3,13 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Member Photo Upload</title>
+  <title>Member Photo Upload Pro</title>
+  <meta name="robots" content="noindex,nofollow">
 
   <!-- Uploadcare Web Component styles -->
-  <link rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.css">
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.css"
+  >
 
-  <!-- Uploadcare Web Components -->
+  <!-- Uploadcare Web Components (CDN) -->
   <script type="module">
     import * as UC from 'https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.js';
     UC.defineComponents(UC);
@@ -54,15 +57,18 @@
       <div class="full">
         <label for="memberId">Member ID (optional)</label>
         <input id="memberId" name="memberId" type="text" placeholder="e.g., 12345">
-        <div class="hint">If provided, we’ll tag the photo with this ID. Tip: click the thumbnail to re-open the editor.</div>
+        <div class="hint">If provided, we’ll tag the photo with this ID. Click the thumbnail to re-open the editor.</div>
       </div>
     </form>
 
-    <!-- Uploadcare config (with editor) -->
+    <!-- Uploadcare config -->
     <uc-config
       ctx-name="my-uploader"
-      pubkey="0db3ca4d026eff0750b7"
-      source-list="local, camera, facebook, gdrive"
+      pubkey="a851fb1279242970ca15"
+
+      source-list="local, camera, facebook, gdrive, gphotos"
+      files-view-mode="grid"
+
       multiple="false"
       img-only="true"
       accept="image/jpeg,image/png,image/heic,image/heif"
@@ -77,9 +83,9 @@
     </uc-config>
 
     <!-- Uploader UI -->
-    <uc-file-uploader-regular id="uploader" ctx-name="my-uploader" class="uc-light"></uc-file-uploader-regular>
+    <uc-file-uploader-regular ctx-name="my-uploader" class="uc-light"></uc-file-uploader-regular>
 
-    <!-- Context provider (events fire here) -->
+    <!-- Context provider (Uploadcare events fire here) -->
     <uc-upload-ctx-provider id="uploaderctx" ctx-name="my-uploader"></uc-upload-ctx-provider>
 
     <!-- Live preview + actions -->
@@ -104,14 +110,13 @@
     const BASE_TAG              = "member-upload";
     const SUCCESS_REDIRECT      = "https://www.ceo.org/successful-upload";
 
-    // ====== Policy knobs (adjust if you want stricter checks) ======
+    // ====== Policy knobs ======
     const MIN_BYTES = 200 * 1024;          // 200 KB minimum
     const MAX_BYTES = 10 * 1024 * 1024;    // 10 MB maximum
     const MIN_W = 600, MIN_H = 600;        // minimum dimensions
 
     // ====== Elements ======
     const ctxEl     = document.getElementById("uploaderctx");
-    const uploader  = document.getElementById("uploader");
     const $status   = document.getElementById("status");
     const $previewW = document.getElementById("previewWrap");
     const $preview  = document.getElementById("preview");
@@ -123,7 +128,7 @@
     const memberId  = document.getElementById("memberId");
     const configEl  = document.querySelector("uc-config");
 
-    // ===== Validators (for Uploadcare WC) =====
+    // ===== Validators (Uploadcare WC) =====
     const allowedTypes = new Set(["image/jpeg","image/png","image/heic","image/heif"]);
     const imagesOnly = (entry) => {
       if (!entry.isImage || (entry.mimeType && !allowedTypes.has(entry.mimeType))) {
@@ -147,17 +152,17 @@
         return { message: `Image must be at least ${MIN_W}×${MIN_H}px.` };
       }
     };
-    // Attach validators (set as property, not attribute)
+    // Attach validators (set as property)
     configEl.fileValidators = [imagesOnly, minSize, maxSize, minDimensions];
 
     // ===== Helpers =====
     const slug = s => (s || "").toString().trim()
       .toLowerCase()
-      .normalize("NFD").replace(/[\u0300-\u036f]/g,"")   // strip accents
+      .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
       .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
 
     function validateForm() {
-      const ok = !!fullName.value.trim() && email.validity.valid;
+      const ok = !!fullName.value.trim() && /\S+@\S+\.\S+/.test(email.value);
       $sendBtn.disabled = !ok || !currentUrl;
       if (!ok) {
         $status.className = "status error";
@@ -169,20 +174,15 @@
       return ok;
     }
 
-    // ---- FIXED: send plain text (no URL encoding) so spaces/@ show correctly in Context
+    // Send plain text so spaces/@ render correctly in Cloudinary Context
     function buildContextKV() {
       const sanitize = (s = "") => s.toString().trim().replace(/[|=]/g, "-");
       const name = sanitize(fullName.value);
       const mail = sanitize(email.value);
       const id   = sanitize(memberId.value);
-
-      const pairs = [
-        `full_name=${name}`,
-        `email=${mail}`
-      ];
+      const pairs = [`full_name=${name}`, `email=${mail}`];
       if (id) pairs.push(`member_id=${id}`);
-
-      return pairs.join("|"); // Cloudinary context format
+      return pairs.join("|");
     }
 
     function buildTags() {
@@ -193,26 +193,25 @@
     }
 
     function buildPublicBase() {
-      // Name-based filename: full-name[-memberid]-abcd (small random suffix for uniqueness)
+      // full-name[-memberid]-abcd (small random suffix for uniqueness)
       const base = slug(fullName.value);
       const idPart = slug(memberId.value);
       const rand = Math.random().toString(36).slice(2,6);
       return [base, idPart || null, rand].filter(Boolean).join("-");
     }
 
-    // Send to Cloudinary: force exact folder+filename, avoid "preview"
     async function sendToCloudinary(remoteUrl) {
-      const folder     = "home/headshots/Member upload".replace(/\/+$/,"");
-      const baseName   = buildPublicBase();                 // e.g. maria-silva-12345-ab3d
-      const publicPath = `${folder}/${baseName}`;           // full public_id with folder
+      const folder     = CLOUDINARY_FOLDER.replace(/\/+$/,"");
+      const baseName   = buildPublicBase();               // e.g. maria-silva-12345-ab3d
+      const publicPath = `${folder}/${baseName}`;         // full public_id with folder
 
       const form = new FormData();
-      form.append("file", remoteUrl);                       // Uploadcare CDN URL (edited is fine)
-      form.append("upload_preset", "Member_uploads");       // your unsigned preset
-      form.append("public_id", publicPath);                 // force exact folder+filename
-      form.append("filename_override", baseName);           // avoid source-name (e.g., "preview")
-      form.append("tags", buildTags());                     // e.g. "member-upload,member-12345"
-      form.append("context", buildContextKV());             // e.g. "full_name=...|email=...|member_id=..."
+      form.append("file", remoteUrl);                     // Uploadcare CDN URL (edited is fine)
+      form.append("upload_preset", CLOUDINARY_PRESET);    // unsigned preset
+      form.append("public_id", publicPath);               // force exact folder+filename
+      form.append("filename_override", baseName);         // avoid source-name (e.g., "preview")
+      form.append("tags", buildTags());
+      form.append("context", buildContextKV());
 
       const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: "POST", body: form });
       if (!res.ok) throw new Error(await res.text());
@@ -240,7 +239,6 @@
     document.getElementById("sendBtn").addEventListener("click", async () => {
       if (!currentUrl) return;
       if (!validateForm()) return;
-
       try {
         $status.className = "status";
         $status.textContent = "Uploading to Cloudinary…";
@@ -255,7 +253,7 @@
       }
     });
 
-    // Listen on the Uploadcare context provider (v1 events)
+    // Listen on the Uploadcare context provider (v1 events fire here)
     function updateFromDetail(detail) {
       const errs = detail?.errors || [];
       if (errs.length) {
@@ -263,7 +261,6 @@
         $status.textContent = errs.map(er => er.message).join(" • ");
         return;
       }
-
       const url = extractUrl(detail);
       if (!url) return;
       currentUrl = url;
