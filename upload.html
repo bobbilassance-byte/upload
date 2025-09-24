@@ -3,14 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Member Photo Upload Pro</title>
+  <title>Member Photo Upload</title>
   <meta name="robots" content="noindex,nofollow">
 
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="https://res.cloudinary.com/chief-executives-organization/image/upload/v1758023553/CEOFavicon_ztwn2g.png"/>
+
+  <!-- Google Fonts: Oswald (headings) + Montserrat (body/UI) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&family=Oswald:wght@400;500;600&display=swap" rel="stylesheet">
+
   <!-- Uploadcare Web Component styles -->
-  <link
-    rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.css"
-  >
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.css">
 
   <!-- Uploadcare Web Components (CDN) -->
   <script type="module">
@@ -19,20 +24,99 @@
   </script>
 
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin:0; padding:24px; background:#f6f7fb; color:#111; }
-    .wrap { max-width: 720px; margin: 0 auto; }
-    h1 { margin-bottom: 8px; }
-    p  { margin-top: 0; color:#444; }
+    :root{
+      --font-body: "Montserrat", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      --font-heading: "Oswald", "Montserrat", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      --text: #111;
+      --muted: #444;
+      --border: #d0d5dd;
+      --bg: #f6f7fb;
+      --accent: #111;
+      --topbar-h: 72px;
+    }
+
+    html, body { height: 100%; }
+    body {
+      font-family: var(--font-body);
+      margin: 0;
+      background: var(--bg); color: var(--text);
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+      padding-top: var(--topbar-h); /* offset for fixed top bar */
+    }
+
+    /* ===== Top black bar (centered logo, right link) ===== */
+    .topbar {
+      position: fixed; inset: 0 0 auto 0; height: var(--topbar-h);
+      background: #000; color: #fff; z-index: 1000;
+      box-shadow: 0 1px 0 rgba(255,255,255,.06), 0 2px 8px rgba(0,0,0,.3);
+    }
+    .topbar .inner {
+      max-width: 1200px; margin: 0 auto; height: 100%;
+      position: relative; padding: 0 20px;
+    }
+    /* Centered logo */
+    .logo {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;
+    }
+    .logo img {
+      display: block; height: 36px; width: auto; /* white PNG on black, no inversion */
+    }
+    .logo .fallback {
+      font-family: var(--font-heading); font-weight: 600; letter-spacing: .4px; font-size: 22px;
+      text-transform: uppercase;
+    }
+    /* Right link */
+    .right-link {
+      position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+      color: #fff; text-decoration: none; font-size: 14px; letter-spacing: .3px;
+      font-family: var(--font-heading); text-transform: uppercase;
+      padding: 8px 10px; border-radius: 8px;
+    }
+    .right-link:hover { text-decoration: underline; }
+
+    /* ===== Page content ===== */
+    .wrap { max-width: 720px; margin: 0 auto; padding: 24px; }
+
+    h1, h2 {
+      font-family: var(--font-heading);
+      font-weight: 600;
+      letter-spacing: .3px;
+      margin: 0 0 8px 0;
+		margin-top: 28px;
+		text-transform: uppercase;
+    }
+    h1 { font-size: 1.9rem; line-height: 1.15; }
+    h2 { font-size: 1.1rem; text-transform: uppercase; margin-top: 38px; }
+
+    p  { margin-top: 0; color: var(--muted); }
+
     form { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
     form .full { grid-column: 1 / -1; }
-    label { font-size:14px; color:#333; display:block; margin-bottom:4px; }
-    input { width:100%; padding:10px 12px; border:1px solid #d0d5dd; border-radius:8px; font-size:16px; box-sizing:border-box; }
+    label {
+      font-size:14px; color:#333; display:block; margin-bottom:4px;
+      font-weight:600; font-family: var(--font-heading); letter-spacing:.2px; text-transform: uppercase;
+    }
+    input {
+      width:100%; padding:10px 12px;
+      border:1px solid var(--border); border-radius:8px; font-size:16px;
+      font-family: var(--font-body);
+      box-sizing:border-box; background:#fff;
+    }
     .hint { font-size:12px; color:#666; margin-top:4px; }
+
     uc-file-uploader-regular { display:block; margin-top:16px; }
+
     .preview { margin-top:16px; display:flex; align-items:center; gap:16px; }
     .preview img { max-width:180px; border-radius:12px; border:1px solid #e5e7eb; }
+
     .actions { margin-top:16px; display:flex; gap:12px; }
-    button { padding:10px 16px; border-radius:10px; border:1px solid #d0d5dd; background:#111; color:#fff; cursor:pointer; font-size:15px; }
+    button {
+      padding:10px 16px; border-radius:10px;
+      border:1px solid var(--border); background: var(--accent); color:#fff;
+      cursor:pointer; font-size:15px; font-weight:600;
+      font-family: var(--font-body);
+    }
     button[disabled] { opacity:.5; cursor:not-allowed; }
     .status { margin-top: 16px; font-size: 14px; }
     .done { color: #0a7a2f; }
@@ -40,11 +124,28 @@
   </style>
 </head>
 <body>
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="inner">
+      <a class="logo" href="https://www.ceo.org" target="_blank" rel="noopener">
+        <img
+          src="https://res.cloudinary.com/chief-executives-organization/image/upload/v1747157393/Promotional/General/CEO%20Logos/three_swooshes_white.png"
+          alt="CEO logo"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block'">
+        <span class="fallback" style="display:none">CEO</span>
+      </a>
+
+      <a class="right-link" href="https://www.ceo.org" target="_self" rel="noopener">
+        Back to CEO
+      </a>
+    </div>
+  </header>
+
   <div class="wrap">
     <h1>Upload your profile photo</h1>
     <p>Accepted: JPG, JPEG, PNG, HEIC • Min 600×600 • 1:1 crop</p>
 
-    <!-- Required member info -->
+    <h2>Your details</h2>
     <form id="memberForm" novalidate>
       <div class="full">
         <label for="fullName">Full name *</label>
@@ -61,34 +162,26 @@
       </div>
     </form>
 
-    <!-- Uploadcare config -->
+    <h2>Upload & edit</h2>
     <uc-config
       ctx-name="my-uploader"
       pubkey="a851fb1279242970ca15"
-
       source-list="local, camera, facebook, gdrive, gphotos"
       files-view-mode="grid"
-
       multiple="false"
       img-only="true"
       accept="image/jpeg,image/png,image/heic,image/heif"
-
       use-cloud-image-editor="true"
       cloud-image-editor-tabs="crop"
       crop-preset="1:1"
       cloud-image-editor-auto-open="true"
-
       image-shrink="1600x1600 90%"
       max-local-file-size-bytes="10485760">
     </uc-config>
 
-    <!-- Uploader UI -->
     <uc-file-uploader-regular ctx-name="my-uploader" class="uc-light"></uc-file-uploader-regular>
-
-    <!-- Context provider (Uploadcare events fire here) -->
     <uc-upload-ctx-provider id="uploaderctx" ctx-name="my-uploader"></uc-upload-ctx-provider>
 
-    <!-- Live preview + actions -->
     <div class="preview" id="previewWrap" style="display:none">
       <img id="preview" alt="Selected photo preview">
       <div class="info">
@@ -105,8 +198,8 @@
   <script>
     // ====== Cloudinary (your org) ======
     const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/chief-executives-organization/image/upload";
-    const CLOUDINARY_PRESET     = "Member_uploads";                 // unsigned preset
-    const CLOUDINARY_FOLDER     = "home/headshots/Member upload";   // folder
+    const CLOUDINARY_PRESET     = "Member_uploads";
+    const CLOUDINARY_FOLDER     = "home/headshots/Member upload";
     const BASE_TAG              = "member-upload";
     const SUCCESS_REDIRECT      = "https://www.ceo.org/successful-upload";
 
@@ -152,7 +245,6 @@
         return { message: `Image must be at least ${MIN_W}×${MIN_H}px.` };
       }
     };
-    // Attach validators (set as property)
     configEl.fileValidators = [imagesOnly, minSize, maxSize, minDimensions];
 
     // ===== Helpers =====
@@ -174,7 +266,6 @@
       return ok;
     }
 
-    // Send plain text so spaces/@ render correctly in Cloudinary Context
     function buildContextKV() {
       const sanitize = (s = "") => s.toString().trim().replace(/[|=]/g, "-");
       const name = sanitize(fullName.value);
@@ -193,7 +284,6 @@
     }
 
     function buildPublicBase() {
-      // full-name[-memberid]-abcd (small random suffix for uniqueness)
       const base = slug(fullName.value);
       const idPart = slug(memberId.value);
       const rand = Math.random().toString(36).slice(2,6);
@@ -202,14 +292,14 @@
 
     async function sendToCloudinary(remoteUrl) {
       const folder     = CLOUDINARY_FOLDER.replace(/\/+$/,"");
-      const baseName   = buildPublicBase();               // e.g. maria-silva-12345-ab3d
-      const publicPath = `${folder}/${baseName}`;         // full public_id with folder
+      const baseName   = buildPublicBase();
+      const publicPath = `${folder}/${baseName}`;
 
       const form = new FormData();
-      form.append("file", remoteUrl);                     // Uploadcare CDN URL (edited is fine)
-      form.append("upload_preset", CLOUDINARY_PRESET);    // unsigned preset
-      form.append("public_id", publicPath);               // force exact folder+filename
-      form.append("filename_override", baseName);         // avoid source-name (e.g., "preview")
+      form.append("file", remoteUrl);
+      form.append("upload_preset", "Member_uploads");
+      form.append("public_id", publicPath);
+      form.append("filename_override", baseName);
       form.append("tags", buildTags());
       form.append("context", buildContextKV());
 
@@ -232,10 +322,8 @@
       validateForm();
     }
 
-    // Enable/disable Send button on form input changes
     [fullName, email].forEach(el => el.addEventListener("input", validateForm));
 
-    // User confirmation to send
     document.getElementById("sendBtn").addEventListener("click", async () => {
       if (!currentUrl) return;
       if (!validateForm()) return;
@@ -253,7 +341,6 @@
       }
     });
 
-    // Listen on the Uploadcare context provider (v1 events fire here)
     function updateFromDetail(detail) {
       const errs = detail?.errors || [];
       if (errs.length) {
@@ -270,9 +357,10 @@
       showPreview(currentUrl, sizeText);
     }
 
-    ctxEl.addEventListener("file-upload-success", (e) => updateFromDetail(e.detail));
-    ctxEl.addEventListener("file-url-changed",   (e) => updateFromDetail(e.detail)); // fires after edits
-    ctxEl.addEventListener("common-upload-success", (e) => {
+    const ctx = document.getElementById("uploaderctx");
+    ctx.addEventListener("file-upload-success", (e) => updateFromDetail(e.detail));
+    ctx.addEventListener("file-url-changed",   (e) => updateFromDetail(e.detail));
+    ctx.addEventListener("common-upload-success", (e) => {
       const first = e?.detail?.successEntries?.[0];
       if (first) updateFromDetail(first);
     });
