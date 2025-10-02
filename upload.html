@@ -5,19 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Member Photo Upload</title>
   <meta name="robots" content="noindex,nofollow">
-
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="https://res.cloudinary.com/chief-executives-organization/image/upload/v1758023553/CEOFavicon_ztwn2g.png"/>
-
-  <!-- Google Fonts: Oswald (headings) + Montserrat (body/UI) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&family=Oswald:wght@400;500;600&display=swap" rel="stylesheet">
-
-  <!-- Uploadcare Web Component styles -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.css">
-
-  <!-- Uploadcare Web Components (CDN) -->
   <script type="module">
     import * as UC from 'https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@1/web/uc-file-uploader-regular.min.js';
     UC.defineComponents(UC);
@@ -27,96 +19,32 @@
     :root{
       --font-body: "Montserrat", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
       --font-heading: "Oswald", "Montserrat", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-      --text: #111;
-      --muted: #444;
-      --border: #d0d5dd;
-      --bg: #f6f7fb;
-      --accent: #111;
-      --topbar-h: 72px;
+      --text: #111; --muted: #444; --border: #d0d5dd; --bg: #f6f7fb; --accent: #111; --topbar-h: 72px;
     }
-
     html, body { height: 100%; }
-    body {
-      font-family: var(--font-body);
-      margin: 0;
-      background: var(--bg); color: var(--text);
-      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
-      padding-top: var(--topbar-h); /* offset for fixed top bar */
-    }
-
-    /* ===== Top black bar (centered logo, right link) ===== */
-    .topbar {
-      position: fixed; inset: 0 0 auto 0; height: var(--topbar-h);
-      background: #000; color: #fff; z-index: 1000;
-      box-shadow: 0 1px 0 rgba(255,255,255,.06), 0 2px 8px rgba(0,0,0,.3);
-    }
-    .topbar .inner {
-      max-width: 1200px; margin: 0 auto; height: 100%;
-      position: relative; padding: 0 20px;
-    }
-    /* Centered logo */
-    .logo {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;
-    }
-    .logo img {
-      display: block; height: 36px; width: auto; /* white PNG on black, no inversion */
-    }
-    .logo .fallback {
-      font-family: var(--font-heading); font-weight: 600; letter-spacing: .4px; font-size: 22px;
-      text-transform: uppercase;
-    }
-    /* Right link */
-    .right-link {
-      position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
-      color: #fff; text-decoration: none; font-size: 14px; letter-spacing: .3px;
-      font-family: var(--font-heading); text-transform: uppercase;
-      padding: 8px 10px; border-radius: 8px;
-    }
+    body { font-family: var(--font-body); margin: 0; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; padding-top: var(--topbar-h); }
+    .topbar { position: fixed; inset: 0 0 auto 0; height: var(--topbar-h); background: #000; color: #fff; z-index: 1000; box-shadow: 0 1px 0 rgba(255,255,255,.06), 0 2px 8px rgba(0,0,0,.3); }
+    .topbar .inner { max-width: 1200px; margin: 0 auto; height: 100%; position: relative; padding: 0 20px; }
+    .logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+    .logo img { display: block; height: 36px; width: auto; }
+    .logo .fallback { font-family: var(--font-heading); font-weight: 600; letter-spacing: .4px; font-size: 22px; text-transform: uppercase; }
+    .right-link { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); color: #fff; text-decoration: none; font-size: 14px; letter-spacing: .3px; font-family: var(--font-heading); text-transform: uppercase; padding: 8px 10px; border-radius: 8px; }
     .right-link:hover { text-decoration: underline; }
-
-    /* ===== Page content ===== */
     .wrap { max-width: 720px; margin: 0 auto; padding: 24px; }
-
-    h1, h2 {
-      font-family: var(--font-heading);
-      font-weight: 600;
-      letter-spacing: .3px;
-      margin: 0 0 8px 0;
-		margin-top: 28px;
-		text-transform: uppercase;
-    }
+    h1, h2 { font-family: var(--font-heading); font-weight: 600; letter-spacing: .3px; margin: 0 0 8px 0; margin-top: 28px; text-transform: uppercase; }
     h1 { font-size: 1.9rem; line-height: 1.15; }
     h2 { font-size: 1.1rem; text-transform: uppercase; margin-top: 38px; }
-
     p  { margin-top: 0; color: var(--muted); }
-
     form { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
     form .full { grid-column: 1 / -1; }
-    label {
-      font-size:14px; color:#333; display:block; margin-bottom:4px;
-      font-weight:600; font-family: var(--font-heading); letter-spacing:.2px; text-transform: uppercase;
-    }
-    input {
-      width:100%; padding:10px 12px;
-      border:1px solid var(--border); border-radius:8px; font-size:16px;
-      font-family: var(--font-body);
-      box-sizing:border-box; background:#fff;
-    }
+    label { font-size:14px; color:#333; display:block; margin-bottom:4px; font-weight:600; font-family: var(--font-heading); letter-spacing:.2px; text-transform: uppercase; }
+    input, select { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:16px; font-family: var(--font-body); box-sizing:border-box; background:#fff; }
     .hint { font-size:12px; color:#666; margin-top:4px; }
-
     uc-file-uploader-regular { display:block; margin-top:16px; }
-
     .preview { margin-top:16px; display:flex; align-items:center; gap:16px; }
     .preview img { max-width:180px; border-radius:12px; border:1px solid #e5e7eb; }
-
     .actions { margin-top:16px; display:flex; gap:12px; }
-    button {
-      padding:10px 16px; border-radius:10px;
-      border:1px solid var(--border); background: var(--accent); color:#fff;
-      cursor:pointer; font-size:15px; font-weight:600;
-      font-family: var(--font-body);
-    }
+    button { padding:10px 16px; border-radius:10px; border:1px solid var(--border); background: var(--accent); color:#fff; cursor:pointer; font-size:15px; font-weight:600; font-family: var(--font-body); }
     button[disabled] { opacity:.5; cursor:not-allowed; }
     .status { margin-top: 16px; font-size: 14px; }
     .done { color: #0a7a2f; }
@@ -124,26 +52,20 @@
   </style>
 </head>
 <body>
-  <!-- Top bar -->
   <header class="topbar">
     <div class="inner">
       <a class="logo" href="https://www.ceo.org" target="_blank" rel="noopener">
-        <img
-          src="https://res.cloudinary.com/chief-executives-organization/image/upload/v1747157393/Promotional/General/CEO%20Logos/three_swooshes_white.png"
-          alt="CEO logo"
+        <img src="https://res.cloudinary.com/chief-executives-organization/image/upload/v1747157393/Promotional/General/CEO%20Logos/three_swooshes_white.png" alt="CEO logo"
           onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block'">
         <span class="fallback" style="display:none">CEO</span>
       </a>
-
-      <a class="right-link" href="https://www.ceo.org" target="_self" rel="noopener">
-        Back to CEO
-      </a>
+      <a class="right-link" href="https://www.ceo.org/members/me" target="_self" rel="noopener">Back to MY ACCOUNT</a>
     </div>
   </header>
 
   <div class="wrap">
-    <h1>Upload your profile photo</h1>
-    <p>Accepted: JPG, JPEG, PNG, HEIC • Min 600×600 • 1:1 crop</p>
+    <h1>Upload your Photo</h1>
+    <p>Accepted: JPG, JPEG, PNG, HEIC • Minimum size: 600×600 </p>
 
     <h2>Your details</h2>
     <form id="memberForm" novalidate>
@@ -155,14 +77,31 @@
         <label for="email">Email *</label>
         <input id="email" name="email" type="email" required placeholder="name@example.com">
       </div>
+
+      <!-- NEW: Photo type (required) -->
+      <div class="full">
+        <label for="photoType">Photo type *</label>
+        <select id="photoType" name="photoType" required>
+          <option value="" selected disabled>Select a type…</option>
+          <option value="couple">Couple photo</option>
+          <option value="spouse">Spouse photo</option>
+          <option value="member">Member photo</option>
+          <option value="resource">Resource</option>
+          <option value="staff">Staff</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
       <div class="full">
         <label for="memberId">Member ID (optional)</label>
         <input id="memberId" name="memberId" type="text" placeholder="e.g., 12345">
-        <div class="hint">If provided, we’ll tag the photo with this ID. Click the thumbnail to re-open the editor.</div>
+        <div class="hint">Your photo will be submitted for review. Please allow 3-5 days for the update to be reflected on your profile.</div>
       </div>
     </form>
 
     <h2>Upload & edit</h2>
+
+    <!-- CHANGED: crop-preset from 1:1 to 16:9 -->
     <uc-config
       ctx-name="my-uploader"
       pubkey="a851fb1279242970ca15"
@@ -173,7 +112,7 @@
       accept="image/jpeg,image/png,image/heic,image/heif"
       use-cloud-image-editor="true"
       cloud-image-editor-tabs="crop"
-      crop-preset="1:1"
+      crop-preset="16:9"
       cloud-image-editor-auto-open="true"
       image-shrink="1600x1600 90%"
       max-local-file-size-bytes="10485760">
@@ -219,6 +158,7 @@
     const fullName  = document.getElementById("fullName");
     const email     = document.getElementById("email");
     const memberId  = document.getElementById("memberId");
+    const photoType = document.getElementById("photoType"); // NEW
     const configEl  = document.querySelector("uc-config");
 
     // ===== Validators (Uploadcare WC) =====
@@ -254,11 +194,12 @@
       .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
 
     function validateForm() {
-      const ok = !!fullName.value.trim() && /\S+@\S+\.\S+/.test(email.value);
+      const typeOk = !!photoType.value; // NEW required field
+      const ok = !!fullName.value.trim() && /\S+@\S+\.\S+/.test(email.value) && typeOk;
       $sendBtn.disabled = !ok || !currentUrl;
       if (!ok) {
         $status.className = "status error";
-        $status.textContent = "Please enter your Full name and a valid Email before sending.";
+        $status.textContent = "Please enter your Full name, a valid Email, and select a Photo type before sending.";
       } else {
         $status.className = "status";
         $status.textContent = "";
@@ -271,7 +212,8 @@
       const name = sanitize(fullName.value);
       const mail = sanitize(email.value);
       const id   = sanitize(memberId.value);
-      const pairs = [`full_name=${name}`, `email=${mail}`];
+      const ptype = sanitize(photoType.value); // NEW
+      const pairs = [`full_name=${name}`, `email=${mail}`, `photo_type=${ptype}`]; // NEW
       if (id) pairs.push(`member_id=${id}`);
       return pairs.join("|");
     }
@@ -280,6 +222,8 @@
       const tags = [BASE_TAG];
       const id = slug(memberId.value);
       if (id) tags.push(`member-${id}`);
+      // Optional: also tag the photo type for easier filtering in CLD (kept simple; can remove if undesired)
+      if (photoType.value) tags.push(`type-${slug(photoType.value)}`);
       return tags.join(",");
     }
 
@@ -297,7 +241,7 @@
 
       const form = new FormData();
       form.append("file", remoteUrl);
-      form.append("upload_preset", "Member_uploads");
+      form.append("upload_preset", CLOUDINARY_PRESET);
       form.append("public_id", publicPath);
       form.append("filename_override", baseName);
       form.append("tags", buildTags());
@@ -322,7 +266,8 @@
       validateForm();
     }
 
-    [fullName, email].forEach(el => el.addEventListener("input", validateForm));
+    [fullName, email, photoType].forEach(el => el.addEventListener("input", validateForm));
+    photoType.addEventListener("change", validateForm);
 
     document.getElementById("sendBtn").addEventListener("click", async () => {
       if (!currentUrl) return;
